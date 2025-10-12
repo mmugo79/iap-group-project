@@ -1,0 +1,33 @@
+{
+  "info": {
+    "name": "Vehicle Pro Portal API",
+    "_postman_id": "veh-pro-demo",
+    "description": "API collection for Vehicle Pro Portal",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Vehicles",
+      "item": [
+        {"name": "Create Vehicle","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"model\":\"Toyota Axio\",\"plate_no\":\"KDA123A\",\"price_per_day\":3000,\"status\":\"available\",\"image\":\"axio.jpg\"}"},"url":"http://localhost:8000/api/vehicles/create.php"}},
+        {"name": "Get Vehicles","request":{"method":"GET","url":"http://localhost:8000/api/vehicles/read.php"}}
+      ]
+    },
+    {
+      "name": "Reservations",
+      "item": [
+        {"name": "Create Reservation","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"user_id\":1,\"vehicle_id\":2,\"start_date\":\"2025-10-13\",\"end_date\":\"2025-10-15\"}"},"url":"http://localhost:8000/api/reservations/create.php"}},
+        {"name": "List Reservations","request":{"method":"GET","url":"http://localhost:8000/api/reservations/list.php"}}
+      ]
+    },
+    {
+      "name": "Stats",
+      "item": [
+        {"name": "Users Count","request":{"method":"GET","url":"http://localhost:8000/api/stats/users_count.php"}},
+        {"name": "Vehicles Count","request":{"method":"GET","url":"http://localhost:8000/api/stats/vehicles_count.php"}},
+        {"name": "Reservations Count","request":{"method":"GET","url":"http://localhost:8000/api/stats/reservations_count.php"}},
+        {"name": "Vehicles by Status","request":{"method":"GET","url":"http://localhost:8000/api/stats/vehicles_by_status.php"}}
+      ]
+    }
+  ]
+}
