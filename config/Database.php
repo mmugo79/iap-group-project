@@ -8,7 +8,7 @@ class Database {
     private $host = '127.0.0.1';
     private $db_name = 'vehicle_pro';
     private $username = 'root';
-    private $password = '';
+    private $password = 'MosesMugo@123';
     public $conn;
 
     public function getConnection(){
