@@ -1,45 +1,43 @@
 <?php
+namespace Models;
+use PDO;
+
 class Vehicle {
-    // Properties (attributes)
-    private string $make;
-    private string $model;
-    private int $year;
-
-    // Constructor
-    public function __construct(string $make, string $model, int $year) {
-        $this->make = $make;
-        $this->model = $model;
-        $this->year = $year;
+    private $conn;
+    private $table = 'vehicles';
+    public function __construct(PDO $db){
+        $this->conn = $db;
     }
 
-    // Getters
-    public function getMake(): string {
-        return $this->make;
+    public function create($model, $plate, $price, $status='available', $image=null){
+        $sql = "INSERT INTO {$this->table} (model, plate_no, price_per_day, status, image) VALUES (:m,:p,:pr,:s,:img)";
+        $stmt = $this->conn->prepare($sql);
+        return $stmt->execute([
+            ':m'=>$model, ':p'=>$plate, ':pr'=>$price, ':s'=>$status, ':img'=>$image
+        ]);
     }
 
-    public function getModel(): string {
-        return $this->model;
+    public function all(){
+        $sql = "SELECT * FROM {$this->table} ORDER BY created_at DESC";
+        return $this->conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getYear(): int {
-        return $this->year;
+    public function find($id){
+        $sql = "SELECT * FROM {$this->table} WHERE id=:id";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->execute([':id'=>$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    // Setters
-    public function setMake(string $make): void {
-        $this->make = $make;
+    public function update($id, $model, $plate, $price, $status){
+        $sql = "UPDATE {$this->table} SET model=:m, plate_no=:p, price_per_day=:pr, status=:s WHERE id=:id";
+        $stmt = $this->conn->prepare($sql);
+        return $stmt->execute([':m'=>$model,':p'=>$plate,':pr'=>$price,':s'=>$status,':id'=>$id]);
     }
 
-    public function setModel(string $model): void {
-        $this->model = $model;
-    }
-
-    public function setYear(int $year): void {
-        $this->year = $year;
-    }
-
-    // Example behavior (method)
-    public function getVehicleInfo(): string {
-        return $this->year . " " . $this->make . " " . $this->model;
+    public function delete($id){
+        $sql = "DELETE FROM {$this->table} WHERE id=:id";
+        $stmt = $this->conn->prepare($sql);
+        return $stmt->execute([':id'=>$id]);
     }
 }
