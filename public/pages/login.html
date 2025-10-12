@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Login - VehiclePro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <div class="card mx-auto" style="max-width:420px">
+      <div class="card-body">
+        <h4>Login</h4>
+        <form id="loginForm">
+          <div class="mb-3"><input class="form-control" name="email" placeholder="Email"></div>
+          <div class="mb-3"><input class="form-control" name="password" type="password" placeholder="Password"></div>
+          <button class="btn btn-primary">Login</button>
+        </form>
+        <div id="msg"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const res = await fetch('/backend/api/auth/login.php', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email: f.email.value, password: f.password.value})
+  });
+  const j = await res.json();
+  if(j.success){
+    location.href = '/public/pages/dashboard.html';
+  } else {
+    document.getElementById('msg').innerHTML = '<div class="alert alert-danger">'+(j.error || 'Login failed')+'</div>';
+  }
+});
+</script>
+</body>
+</html>
