@@ -1,49 +1,44 @@
 <?php
+namespace Models;
+use PDO;
+
 class User {
-    private $id;
-    private $name;
-    private $email;
-    private $password;
-    private $phone;
-    private $role;
+    private $conn;
+    private $table = 'users';
 
-    public function __construct($name, $email, $password, $phone, $role = "customer") {
-        $this->name = $name;
-        $this->email = $email;
-        $this->password = password_hash($password, PASSWORD_DEFAULT);
-        $this->phone = $phone;
-        $this->role = $role;
+    public function __construct(PDO $db){
+        $this->conn = $db;
     }
 
-    public function getId() { return $this->id; }
-    public function getName() { return $this->name; }
-    public function getEmail() { return $this->email; }
-    public function getPhone() { return $this->phone; }
-    public function getRole() { return $this->role; }
-
-    public function setPassword($password) {
-        $this->password = password_hash($password, PASSWORD_DEFAULT);
-    }
-    public function verifyPassword($password) {
-        return password_verify($password, $this->password);
-    }
-
-    public function save($pdo) {
-        $stmt = $pdo->prepare("INSERT INTO users (name, email, password, phone, role) VALUES (?, ?, ?, ?, ?)");
-        return $stmt->execute([$this->name, $this->email, $this->password, $this->phone, $this->role]);
+    public function create($name, $email, $hashedPassword, $phone = null, $role = 'user'){
+        $sql = "INSERT INTO {$this->table} (name, email, password, phone, role) VALUES (:name,:email,:password,:phone,:role)";
+        $stmt = $this->conn->prepare($sql);
+        return $stmt->execute([
+            ':name'=>$name,
+            ':email'=>$email,
+            ':password'=>$hashedPassword,
+            ':phone'=>$phone,
+            ':role'=>$role
+        ]);
     }
 
-    public static function findByEmail($pdo, $email) {
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
-        $stmt->execute([$email]);
-        $data = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($data) {
-            $user = new User($data['name'], $data['email'], $data['password'], $data['phone'], $data['role']);
-            $user->id = $data['id'];
-            $user->password = $data['password'];
-            return $user;
-        }
-        return null;
+    public function findByEmail($email){
+        $sql = "SELECT * FROM {$this->table} WHERE email = :email LIMIT 1";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->execute([':email'=>$email]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    public function findById($id){
+        $sql = "SELECT * FROM {$this->table} WHERE id = :id LIMIT 1";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->execute([':id'=>$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    public function markVerified($id){
+        $sql = "UPDATE {$this->table} SET verified = 1 WHERE id = :id";
+        $stmt = $this->conn->prepare($sql);
+        return $stmt->execute([':id'=>$id]);
     }
 }
-?>
