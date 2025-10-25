@@ -1,55 +1,288 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Register - VehiclePro</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
-  <div class="container py-5">
-    <div class="card mx-auto" style="max-width:540px">
-      <div class="card-body">
-        <h4 class="card-title">Sign up</h4>
-        <form id="signupForm">
-          <div class="mb-3"><label>Name</label><input class="form-control" name="name" required></div>
-          <div class="mb-3"><label>Email</label><input class="form-control" name="email" type="email" required></div>
-          <div class="mb-3"><label>Password</label><input class="form-control" name="password" type="password" required></div>
-          <div class="mb-3"><button class="btn btn-primary">Register</button></div>
-        </form>
-        <div id="message"></div>
-      </div>
-    </div>
-  </div>
+<?php
+session_start();
+require_once __DIR__ . '/../backend/db.php';
 
-<script>
-document.getElementById('signupForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  const form = e.target;
-  const data = {
-    name: form.name.value,
-    email: form.email.value,
-    password: form.password.value
-  };
-  const res = await fetch('/backend/api/auth/signup.php', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
-  });
-  const j = await res.json();
-  if(j.success){
-    document.getElementById('message').innerHTML = '<div class="alert alert-success">Registered. Check email for code. Your user_id: '+j.user_id+'</div>';
-    // show a prompt for code verification
-    const code = prompt('Enter the code you received in email');
-    if(code){
-      const verify = await fetch('/backend/api/auth/verify_otp.php', {
-        method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:j.user_id, code})
-      });
-      const vj = await verify.json();
-      if(vj.success) alert('Account verified! You can log in.');
-      else alert('Verify failed');
+// Redirect if already logged in
+if(isset($_SESSION['user_id'])) {
+    header("Location: dashboard.php");
+    exit;
+}
+
+$errors = [];
+$success = '';
+
+if(isset($_POST['register'])){
+    $name = trim($_POST['name']);
+    $email = trim($_POST['email']);
+    $password = $_POST['password'];
+    $confirm_password = $_POST['confirm_password'];
+    
+    // Validate inputs
+    if(empty($name) || empty($email) || empty($password)) {
+        $errors[] = "All fields are required.";
     }
-  } else {
-    alert(j.error || 'Error');
-  }
-});
-</script>
+    
+    // Validate passwords match
+    if($password !== $confirm_password){
+        $errors[] = "Passwords do not match.";
+    }
+    
+    // Check password length
+    if(strlen($password) < 6){
+        $errors[] = "Password must be at least 6 characters long.";
+    }
+    
+    // Validate email format
+    if(!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = "Please enter a valid email address.";
+    }
+
+    if(empty($errors)) {
+        // Check if email exists
+        $stmt = $conn->prepare("SELECT id FROM users WHERE email=?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if($result->num_rows > 0){
+            $errors[] = "Email already exists. Please login instead.";
+        } else {
+            // Hash password
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            
+            // Insert user as VERIFIED
+            $stmt = $conn->prepare("INSERT INTO users (name, email, password, verified) VALUES (?,?,?,1)");
+            
+            if($stmt->bind_param("sss", $name, $email, $hashed_password) && $stmt->execute()){
+                // Success - redirect to login page
+                $_SESSION['registration_success'] = "Registration successful! Please login to continue.";
+                header("Location: login.php");
+                exit;
+            } else {
+                $errors[] = "Registration failed. Database error: " . $conn->error;
+            }
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Vehicle Pro Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --dark: #1f2937;
+            --light: #f8fafc;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .register-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+        }
+        
+        .register-header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        
+        .register-header h3 {
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .form-control {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 15px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .input-group-text {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-right: none;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            padding: 12px 30px;
+            font-weight: 600;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .password-strength {
+            height: 4px;
+            border-radius: 2px;
+            margin-top: 5px;
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="register-header">
+            <h3><i class="fas fa-car me-2"></i>VehiclePro</h3>
+            <p class="mb-0 opacity-75">Create your new account</p>
+        </div>
+        
+        <div class="p-4">
+            <?php if($errors): ?>
+                <?php foreach($errors as $error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <?php echo $error; ?>
+                        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+
+            <form method="POST" id="registerForm">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Full Name</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-user text-muted"></i></span>
+                        <input type="text" name="name" class="form-control" placeholder="Enter your full name" required 
+                               value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>">
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Email Address</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-envelope text-muted"></i></span>
+                        <input type="email" name="email" class="form-control" placeholder="Enter your email" required
+                               value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>">
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-lock text-muted"></i></span>
+                        <input type="password" name="password" id="password" class="form-control" placeholder="Create a password" required minlength="6">
+                    </div>
+                    <div class="password-strength" id="passwordStrength"></div>
+                    <div class="form-text">Password must be at least 6 characters long.</div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Confirm Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-lock text-muted"></i></span>
+                        <input type="password" name="confirm_password" id="confirmPassword" class="form-control" placeholder="Confirm your password" required>
+                    </div>
+                    <div class="form-text text-danger" id="passwordMatch" style="display: none;">
+                        <i class="fas fa-exclamation-circle me-1"></i>Passwords do not match
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary w-100 py-3 mb-3 fw-semibold" name="register">
+                    <i class="fas fa-user-plus me-2"></i>Create Account
+                </button>
+                
+                <div class="text-center">
+                    <p class="mb-0 text-muted">
+                        Already have an account? 
+                        <a href="login.php" class="text-primary text-decoration-none fw-semibold">Sign in here</a>
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const password = document.getElementById('password');
+        const confirmPassword = document.getElementById('confirmPassword');
+        const passwordMatch = document.getElementById('passwordMatch');
+        const passwordStrength = document.getElementById('passwordStrength');
+        const form = document.getElementById('registerForm');
+
+        function checkPasswordStrength(pass) {
+            let strength = 0;
+            if (pass.length >= 6) strength += 25;
+            if (pass.match(/[a-z]+/)) strength += 25;
+            if (pass.match(/[A-Z]+/)) strength += 25;
+            if (pass.match(/[0-9]+/)) strength += 25;
+            
+            if (strength === 0) {
+                passwordStrength.style.background = '#e53e3e';
+                passwordStrength.style.width = '0%';
+            } else if (strength <= 50) {
+                passwordStrength.style.background = '#ed8936';
+                passwordStrength.style.width = strength + '%';
+            } else if (strength <= 75) {
+                passwordStrength.style.background = '#ecc94b';
+                passwordStrength.style.width = strength + '%';
+            } else {
+                passwordStrength.style.background = '#38a169';
+                passwordStrength.style.width = strength + '%';
+            }
+        }
+
+        function checkPasswordMatch() {
+            if (password.value && confirmPassword.value) {
+                if (password.value !== confirmPassword.value) {
+                    passwordMatch.style.display = 'block';
+                    confirmPassword.style.borderColor = '#e53e3e';
+                } else {
+                    passwordMatch.style.display = 'none';
+                    confirmPassword.style.borderColor = '#38a169';
+                }
+            }
+        }
+
+        password.addEventListener('input', function() {
+            checkPasswordStrength(this.value);
+            checkPasswordMatch();
+        });
+
+        confirmPassword.addEventListener('input', checkPasswordMatch);
+
+        form.addEventListener('submit', function(e) {
+            if (password.value !== confirmPassword.value) {
+                e.preventDefault();
+                passwordMatch.style.display = 'block';
+                confirmPassword.focus();
+            }
+        });
+    </script>
 </body>
 </html>
