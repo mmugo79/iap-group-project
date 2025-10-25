@@ -1,51 +1,619 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Dashboard - VehiclePro</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body class="p-4">
-  <h3>Dashboard</h3>
-  <div class="row">
-    <div class="col-md-4">
-      <div class="card p-3"><h5>Total Users</h5><div id="usersCount">—</div></div>
-    </div>
-    <div class="col-md-4">
-      <div class="card p-3"><h5>Total Vehicles</h5><div id="vehiclesCount">—</div></div>
-    </div>
-    <div class="col-md-4">
-      <div class="card p-3"><h5>Total Reservations</h5><div id="reservationsCount">—</div></div>
-    </div>
-  </div>
+<?php
+session_start();
+require_once __DIR__ . '/../backend/db.php';
 
-  <div class="card mt-4 p-3">
-    <canvas id="statusChart" height="100"></canvas>
-  </div>
-
-<script>
-async function loadStats(){
-  // simple endpoints that you will create returning JSON counts
-  const [u, v, r, vs] = await Promise.all([
-    fetch('/backend/api/stats/users_count.php').then(res=>res.json()),
-    fetch('/backend/api/stats/vehicles_count.php').then(res=>res.json()),
-    fetch('/backend/api/stats/reservations_count.php').then(res=>res.json()),
-    fetch('/backend/api/stats/vehicles_by_status.php').then(res=>res.json())
-  ]);
-  document.getElementById('usersCount').innerText = u.count || 0;
-  document.getElementById('vehiclesCount').innerText = v.count || 0;
-  document.getElementById('reservationsCount').innerText = r.count || 0;
-
-  const labels = vs.map(x=>x.status);
-  const data = vs.map(x=>x.count);
-
-  new Chart(document.getElementById('statusChart').getContext('2d'), {
-    type: 'pie',
-    data: { labels, datasets: [{ label:'Vehicles', data }] }
-  });
+// Redirect to login if not authenticated
+if(!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
 }
-loadStats();
-</script>
+
+// Check if user logged in
+$is_admin = isset($_SESSION['user_id']) && $_SESSION['user_id'] == 1;
+$user_name = $_SESSION['user_name'] ?? 'Guest';
+
+// Summary stats
+$vehicle_count = $conn->query("SELECT COUNT(*) AS total FROM vehicles")->fetch_assoc()['total'];
+$user_count    = $conn->query("SELECT COUNT(*) AS total FROM users")->fetch_assoc()['total'];
+$booking_count = $conn->query("SELECT COUNT(*) AS total FROM reservations")->fetch_assoc()['total'];
+$revenue_total = $conn->query("SELECT COALESCE(SUM(total_cost), 0) AS total FROM reservations")->fetch_assoc()['total'];
+
+// Recent entries
+$vehicles = $conn->query("SELECT * FROM vehicles ORDER BY id DESC LIMIT 5");
+$bookings = $conn->query("
+    SELECT r.*, u.name AS user_name, v.model AS vehicle_name, v.brand 
+    FROM reservations r 
+    JOIN users u ON r.user_id = u.id 
+    JOIN vehicles v ON r.vehicle_id = v.id 
+    ORDER BY r.id DESC LIMIT 5
+");
+$users = $conn->query("SELECT * FROM users ORDER BY id DESC LIMIT 5");
+
+// Chart data
+$booking_stats = $conn->query("
+    SELECT v.model, COUNT(r.id) AS bookings_count, COALESCE(SUM(r.total_cost), 0) AS revenue
+    FROM vehicles v 
+    LEFT JOIN reservations r ON v.id = r.vehicle_id 
+    GROUP BY v.id, v.model
+    ORDER BY bookings_count DESC
+    LIMIT 6
+");
+
+$labels = $bookings_data = $revenue_data = [];
+while ($row = $booking_stats->fetch_assoc()) {
+    $labels[] = substr($row['model'], 0, 15) . (strlen($row['model']) > 15 ? '...' : '');
+    $bookings_data[] = (int)$row['bookings_count'];
+    $revenue_data[] = (float)$row['revenue'];
+}
+
+// Handle search query
+$search_term = $_GET['search'] ?? '';
+if ($search_term) {
+    $stmt = $conn->prepare("SELECT * FROM vehicles WHERE status='available' AND (model LIKE ? OR brand LIKE ?)");
+    $search_param = "%$search_term%";
+    $stmt->bind_param("ss", $search_param, $search_param);
+    $stmt->execute();
+    $search_results = $stmt->get_result();
+} else {
+    $search_results = $conn->query("SELECT * FROM vehicles WHERE status='available' LIMIT 0");
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard - Vehicle Pro Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1f2937;
+            --light: #f8fafc;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--light);
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar {
+            width: 280px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: white;
+            box-shadow: 2px 0 20px rgba(0,0,0,0.05);
+            padding-top: 80px;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .sidebar a {
+            color: #64748b;
+            padding: 15px 25px;
+            display: block;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+            font-weight: 500;
+        }
+        
+        .sidebar a:hover, .sidebar a.active {
+            background: #f1f5f9;
+            color: var(--primary);
+            border-left: 4px solid var(--primary);
+        }
+        
+        .sidebar a i {
+            width: 20px;
+            text-align: center;
+            margin-right: 12px;
+            font-size: 1.1rem;
+        }
+        
+        .main-content {
+            margin-left: 280px;
+            padding: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 1px solid #f1f5f9;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+        
+        .stat-card.vehicles { border-top: 4px solid var(--primary); }
+        .stat-card.users { border-top: 4px solid var(--success); }
+        .stat-card.bookings { border-top: 4px solid var(--warning); }
+        .stat-card.revenue { border-top: 4px solid var(--danger); }
+        
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            font-size: 1.5rem;
+        }
+        
+        .stat-card.vehicles .stat-icon { background: rgba(102, 126, 234, 0.1); color: var(--primary); }
+        .stat-card.users .stat-icon { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .stat-card.bookings .stat-icon { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .stat-card.revenue .stat-icon { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        
+        .stat-number {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card.vehicles .stat-number { color: var(--primary); }
+        .stat-card.users .stat-number { color: var(--success); }
+        .stat-card.bookings .stat-number { color: var(--warning); }
+        .stat-card.revenue .stat-number { color: var(--danger); }
+        
+        .card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            margin-bottom: 25px;
+            border: 1px solid #f1f5f9;
+        }
+        
+        .card-header {
+            background: white;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 20px 25px;
+            border-radius: 16px 16px 0 0 !important;
+        }
+        
+        .card-header h5 {
+            font-weight: 600;
+            color: var(--dark);
+            margin: 0;
+        }
+        
+        .table th {
+            background: #f8fafc;
+            color: #64748b;
+            font-weight: 600;
+            padding: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .table td {
+            padding: 15px;
+            vertical-align: middle;
+            border-color: #f1f5f9;
+        }
+        
+        .badge-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .badge-available { background: #d1fae5; color: #065f46; }
+        .badge-booked { background: #fee2e2; color: #991b1b; }
+        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-confirmed { background: #dbeafe; color: #1e40af; }
+        .badge-completed { background: #e5e7eb; color: #374151; }
+        
+        .vehicle-image {
+            width: 60px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 80px;
+            }
+            .sidebar a span {
+                display: none;
+            }
+            .sidebar a i {
+                margin-right: 0;
+                font-size: 1.2rem;
+            }
+            .main-content {
+                margin-left: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="index.php">
+                <i class="fas fa-car me-2"></i>VehiclePro
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="text-light me-3">
+                    <i class="fas fa-user me-1"></i>Welcome, <?php echo htmlspecialchars($user_name); ?>
+                    <?php if($is_admin): ?>
+                        <span class="badge bg-warning ms-1">Admin</span>
+                    <?php endif; ?>
+                </span>
+                <a href="logout.php" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <a href="dashboard.php" class="active">
+            <i class="fas fa-tachometer-alt"></i>
+            <span>Dashboard</span>
+        </a>
+        <?php if($is_admin): ?>
+            <a href="#">
+                <i class="fas fa-users"></i>
+                <span>User Management</span>
+            </a>
+            <a href="#">
+                <i class="fas fa-car"></i>
+                <span>Vehicle Management</span>
+            </a>
+            <a href="#">
+                <i class="fas fa-calendar-check"></i>
+                <span>Reservations</span>
+            </a>
+            <a href="#">
+                <i class="fas fa-chart-bar"></i>
+                <span>Reports & Analytics</span>
+            </a>
+        <?php else: ?>
+            <a href="#">
+                <i class="fas fa-history"></i>
+                <span>My Bookings</span>
+            </a>
+            <a href="#">
+                <i class="fas fa-user-cog"></i>
+                <span>My Profile</span>
+            </a>
+        <?php endif; ?>
+        <a href="#search">
+            <i class="fas fa-search"></i>
+            <span>Search Vehicles</span>
+        </a>
+        <a href="index.php">
+            <i class="fas fa-home"></i>
+            <span>Back to Home</span>
+        </a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Welcome Section -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="fw-bold mb-1">Dashboard</h2>
+                <p class="text-muted mb-0">Welcome back, <?php echo $is_admin ? 'Admin' : htmlspecialchars($user_name); ?>! Here's your overview.</p>
+            </div>
+            <div class="text-end">
+                <span class="text-muted"><?php echo date('l, F j, Y'); ?></span>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="row mb-5">
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="stat-card vehicles">
+                    <div class="stat-icon">
+                        <i class="fas fa-car"></i>
+                    </div>
+                    <div class="stat-number"><?php echo $vehicle_count; ?></div>
+                    <h6 class="text-muted">Total Vehicles</h6>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="stat-card users">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-number"><?php echo $user_count; ?></div>
+                    <h6 class="text-muted">Total Users</h6>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="stat-card bookings">
+                    <div class="stat-icon">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <div class="stat-number"><?php echo $booking_count; ?></div>
+                    <h6 class="text-muted">Total Bookings</h6>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="stat-card revenue">
+                    <div class="stat-icon">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                    <div class="stat-number">$<?php echo number_format($revenue_total, 0); ?></div>
+                    <h6 class="text-muted">Total Revenue</h6>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Cars Section -->
+        <div class="card mb-5" id="search">
+            <div class="card-header">
+                <h5><i class="fas fa-search me-2"></i>Search Available Vehicles</h5>
+            </div>
+            <div class="card-body">
+                <form method="GET" class="row g-3">
+                    <div class="col-md-10">
+                        <input type="text" name="search" class="form-control form-control-lg" 
+                               placeholder="Search by vehicle model, brand, or type..." 
+                               value="<?php echo htmlspecialchars($search_term); ?>">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-lg w-100" type="submit">
+                            <i class="fas fa-search me-1"></i>Search
+                        </button>
+                    </div>
+                </form>
+                
+                <?php if($search_term): ?>
+                    <div class="mt-4">
+                        <h6 class="mb-3">Search Results for "<?php echo htmlspecialchars($search_term); ?>"</h6>
+                        <div class="row">
+                            <?php while($car = $search_results->fetch_assoc()): 
+                                $image_url = !empty($car['image']) && file_exists("images/{$car['image']}") 
+                                           ? "images/{$car['image']}" 
+                                           : "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200&q=80";
+                            ?>
+                                <div class="col-md-4 mb-3">
+                                    <div class="card h-100">
+                                        <img src="<?php echo $image_url; ?>" 
+                                             class="card-img-top" 
+                                             alt="<?php echo htmlspecialchars($car['model']); ?>"
+                                             style="height: 180px; object-fit: cover;">
+                                        <div class="card-body">
+                                            <h6 class="card-title fw-bold"><?php echo htmlspecialchars($car['model']); ?></h6>
+                                            <p class="card-text">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($car['brand']); ?><br>
+                                                    <i class="fas fa-calendar me-1"></i>Year: <?php echo $car['year']; ?><br>
+                                                    <i class="fas fa-dollar-sign me-1"></i><?php echo number_format($car['price_per_day'], 2); ?>/day
+                                                </small>
+                                            </p>
+                                            <span class="badge badge-<?php echo $car['status'] === 'available' ? 'available' : 'booked'; ?>">
+                                                <?php echo ucfirst($car['status']); ?>
+                                            </span>
+                                            <a href="book.php?vehicle_id=<?php echo $car['id']; ?>" class="btn btn-primary btn-sm mt-2 w-100">
+                                                <i class="fas fa-bookmark me-1"></i>Book Now
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endwhile; ?>
+                            <?php if($search_results->num_rows == 0): ?>
+                                <div class="col-12">
+                                    <div class="alert alert-info text-center">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        No available vehicles found matching your search criteria.
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Recent Vehicles -->
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-car me-2"></i>Recent Vehicles</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Model</th>
+                                        <th>Brand</th>
+                                        <th>Type</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while($vehicle = $vehicles->fetch_assoc()): ?>
+                                    <tr>
+                                        <td class="fw-semibold"><?php echo htmlspecialchars($vehicle['model']); ?></td>
+                                        <td><?php echo htmlspecialchars($vehicle['brand']); ?></td>
+                                        <td>
+                                            <span class="badge bg-<?php echo $vehicle['type'] === 'new' ? 'success' : 'warning'; ?>">
+                                                <?php echo ucfirst($vehicle['type']); ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-<?php echo $vehicle['status'] === 'available' ? 'available' : 'booked'; ?>">
+                                                <?php echo ucfirst($vehicle['status']); ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Bookings -->
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-history me-2"></i>Recent Bookings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Vehicle</th>
+                                        <th>Brand</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while($booking = $bookings->fetch_assoc()): ?>
+                                    <tr>
+                                        <td class="fw-semibold"><?php echo htmlspecialchars($booking['user_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($booking['vehicle_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($booking['brand']); ?></td>
+                                        <td class="fw-bold text-success">$<?php echo number_format($booking['total_cost'], 2); ?></td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-bar me-2"></i>Bookings per Vehicle</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="bookingsChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-line me-2"></i>Revenue per Vehicle</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="revenueChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const labels = <?php echo json_encode($labels); ?>;
+        const bookingsData = <?php echo json_encode($bookings_data); ?>;
+        const revenueData = <?php echo json_encode($revenue_data); ?>;
+
+        // Bookings Chart
+        new Chart(document.getElementById('bookingsChart'), {
+            type: 'bar', 
+            data: {
+                labels: labels, 
+                datasets: [{
+                    label: 'Number of Bookings', 
+                    data: bookingsData, 
+                    backgroundColor: 'rgba(102, 126, 234, 0.7)', 
+                    borderColor: 'rgba(102, 126, 234, 1)', 
+                    borderWidth: 2,
+                    borderRadius: 8
+                }]
+            }, 
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+
+        // Revenue Chart
+        new Chart(document.getElementById('revenueChart'), {
+            type: 'line', 
+            data: {
+                labels: labels, 
+                datasets: [{
+                    label: 'Revenue ($)', 
+                    data: revenueData, 
+                    fill: true, 
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                    borderColor: 'rgba(239, 68, 68, 1)', 
+                    borderWidth: 3,
+                    tension: 0.4,
+                    pointBackgroundColor: 'rgba(239, 68, 68, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6
+                }]
+            }, 
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
