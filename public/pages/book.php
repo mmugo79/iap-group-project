@@ -11,12 +11,12 @@ $stmt->bind_param("i", $vehicle_id);
 $stmt->execute();
 $vehicle = $stmt->get_result()->fetch_assoc();
 
-$errors=[];
+$errors=[]; 
 
 if(isset($_POST['book'])){
     $start = $_POST['start_date'];
     $end = $_POST['end_date'];
-    $days = (strtotime($end) - strtotime($start)) / 86400 + 1;
+    $days = (strtotime($end) - strtotime($start)) / 86400 + 1; 
     $total = $days * $vehicle['price_per_day'];
 
     // Insert reservation
