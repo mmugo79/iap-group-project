@@ -15,6 +15,7 @@ class Vehicle {
     }
 
     // Count all vehicles
+    //This is the Vehicle model
     public function countAll() {
         $query = "SELECT COUNT(*) as total FROM " . $this->table;
         $stmt = $this->conn->prepare($query);
