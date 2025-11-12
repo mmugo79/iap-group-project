@@ -2,8 +2,8 @@
 // DB credentials.
 define('DB_HOST','localhost');
 define('DB_USER','root');
-define('DB_PASS','Ivan_awesome_2025');
-define('DB_NAME','carrental');
+define('DB_PASS','fatma123');
+define('DB_NAME','vehicle_pro_portal');
 // Establish database connection.
 try
 {
