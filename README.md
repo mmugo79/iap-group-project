@@ -1,13 +1,13 @@
 # Vehicle Pro Portal System
 
-## 📌 Project Overview
+## Project Overview
 The Vehicle Pro Portal System is a web application designed to manage vehicle-related services.  
 It will allow users to register, book/reserve vehicles, manage inventories, and handle orders.  
 Admins will have advanced management capabilities and the system will include payment and reporting features.
 
 ---
 
-## 👥 Group Members
+##  Group Members
 1. Wachira Ivan – 176830  
 2. Moses Mugo – 190027  
 3. Fatuma Abdalla – 191648  
@@ -17,12 +17,12 @@ Admins will have advanced management capabilities and the system will include pa
 
 
 
-## 🔑 Project Roadmap
+##  Project Roadmap
 
 ### Sprint 1 (Deadline: 12th Sept)
-- ✅ Initialize GitHub repository  
-- ✅ Add README, LICENSE, .gitignore  
-- ✅ Set up folder structure: `/backend`, `/frontend`, `/docs`  
+-  Initialize GitHub repository  
+-  Add README, LICENSE, .gitignore  
+-  Set up folder structure: `/backend`, `/frontend`, `/docs`  
 
 ### Sprint 2 (Deadline: 19th Sept)
 - User Authentication with **2FA (email or SMS)**  
