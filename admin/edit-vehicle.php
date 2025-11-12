@@ -13,7 +13,7 @@ if(isset($_POST['submit']))
 $vehicletitle=$_POST['vehicletitle'];
 $brand=$_POST['brandname'];
 $vehicleoverview=$_POST['vehicalorcview'];
-$priceperday=$_POST['priceperday'];
+$priceperday=$_POST['priceperday'];  
 $fueltype=$_POST['fueltype'];
 $modelyear=$_POST['modelyear'];
 $seatingcapacity=$_POST['seatingcapacity'];
