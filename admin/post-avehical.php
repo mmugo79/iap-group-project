@@ -8,7 +8,7 @@ header('location:index.php');
 }
 else{ 
 
-if(isset($_POST['submit']))
+if(isset($_POST['submit']))    
   {
 $vehicletitle=$_POST['vehicletitle'];
 $brand=$_POST['brandname'];

@@ -1,5 +1,5 @@
 <?php
-// Turn on all error reporting
+// Turn on all error reporti
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 

@@ -7,7 +7,7 @@ if(isset($_POST['submit']))
 $fromdate=$_POST['fromdate'];
 $todate=$_POST['todate']; 
 $message=$_POST['message'];
-$useremail=$_SESSION['login'];
+$useremail=$_SESSION['login'];  
 $status=0;
 $vhid=$_GET['vhid'];
 $bookingno=mt_rand(100000000, 999999999);
